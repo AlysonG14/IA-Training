@@ -1,12 +1,14 @@
 from ultralytics import YOLO
 import cv2
-from windowcapture import defaultdict
+from collections import defaultdict
+from windowcapture import WindowCapture
 import numpy as np
 
 #wincap = WindowCapture("Nome_da_Janela")
 offset_x = 400 #0
 offset_y = 300 #30
-wincap = WindowCapture(size=(800, 600), origin=(offset_x, offset_y))
+wincap = WindowCapture(size=(1024, 768), origin=(offset_x, offset_y))
+
 
 # Usa modelo da Yolo
 # Model	    size    mAPval  Speed       Speed       params  FLOPs
