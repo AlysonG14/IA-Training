@@ -7,7 +7,30 @@ from pathlib import Path
 # origens possíveis: image, screenshot, URL, video, YouTube, Streams -> ESP32 / Intelbras / Cameras On-Line
 # mais informações em https://docs.ultralytics.com/modes/predict/#inference-sources
 
-cap = cv2.VideoCapture("rtsp://")
+
+testIPs = [
+    'rtsp://admin:123456@177.215.103.130:554/stream1',
+    'rtsp://admin:123456@177.215.103.130:554/live',
+    'rtsp://admin:123456@177.215.103.130:554/h264',
+    'rtsp://admin:123456@177.215.103.130:554/ch1/main',
+    'rtsp://admin:123456@177.215.103.130:554/Streaming/Channels/101',
+]
+
+stream_found = False
+for url in testIPs:
+    print(f"Testando stream: {url}")
+    cap = cv2.VideoCapture(url)
+    if cap.isOpened():
+        print(f"✅ Conectado com sucesso em: {url}")
+        stream_found = True
+        break
+    else:
+        print(f"❌ Falha ao conectar em: {url}")
+        cap.release()
+
+if not stream_found:
+    print("⚠️ Nenhuma das URLs RTSP funcionou. Verifique IP, porta, usuário/senha ou firewall.")
+    exit(1)
 
 # Usa modelo da Yolo
 # Model	    size    mAPval  Speed       Speed       params  FLOPs

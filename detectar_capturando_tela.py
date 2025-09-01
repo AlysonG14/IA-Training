@@ -3,31 +3,29 @@ import cv2
 from collections import defaultdict
 from windowcapture import WindowCapture
 import numpy as np
+import ctypes
 
-#wincap = WindowCapture("Nome_da_Janela")
-offset_x = 400 #0
-offset_y = 300 #30
+# Detecta resolução da tela
+user32 = ctypes.windll.user32
+screen_width = user32.GetSystemMetrics(0)
+screen_height = user32.GetSystemMetrics(1)
+
+# Configuração do WindowCapture
+offset_x = 400
+offset_y = 300
 wincap = WindowCapture(size=(1024, 768), origin=(offset_x, offset_y))
 
-
-# Usa modelo da Yolo
-# Model	    size    mAPval  Speed       Speed       params  FLOPs
-#           (pixels) 50-95  CPU ONNX A100 TensorRT   (M)     (B)
-#                           (ms)        (ms)
-# YOLOv8n	640	    37.3	80.4	    0.99	    3.2	    8.7
-# YOLOv8s	640	    44.9	128.4	    1.20	    11.2	28.6
-# YOLOv8m	640	    50.2	234.7	    1.83	    25.9	78.9
-# YOLOv8l	640	    52.9	375.2	    2.39	    43.7	165.2
-# YOLOv8x	640	    53.9	479.1	    3.53	    68.2	257.8
-
+# Carrega o modelo YOLO
 model = YOLO("yolov8n.pt")
-
-# Usa modelo treinado com Among
-#model = YOLO("runs/detect/train4/weights/best.pt")
+# model = YOLO("runs/detect/train4/weights/best.pt")  # Modelo customizado
 
 track_history = defaultdict(lambda: [])
 seguir = True
 deixar_rastro = True
+
+# Configura janela em tela cheia
+cv2.namedWindow("Tela", cv2.WINDOW_NORMAL)
+cv2.setWindowProperty("Tela", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
 while True:
     img = wincap.get_screenshot()
@@ -37,31 +35,29 @@ while True:
     else:
         results = model(img)
 
-    # Process results list
     for result in results:
-        # Visualize the results on the frame
         img = result.plot()
 
         if seguir and deixar_rastro:
             try:
-                # Get the boxes and track IDs
                 boxes = result.boxes.xywh.cpu()
                 track_ids = result.boxes.id.int().cpu().tolist()
 
-                # Plot the tracks
                 for box, track_id in zip(boxes, track_ids):
                     x, y, w, h = box
                     track = track_history[track_id]
-                    track.append((float(x), float(y)))  # x, y center point
-                    if len(track) > 30:  # retain 90 tracks for 90 frames
+                    track.append((float(x), float(y)))
+                    if len(track) > 30:
                         track.pop(0)
-
-                    # Draw the tracking lines
                     points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
                     cv2.polylines(img, [points], isClosed=False, color=(230, 0, 0), thickness=5)
             except:
                 pass
 
+    # Redimensiona imagem para a tela inteira
+    img = cv2.resize(img, (screen_width, screen_height), interpolation=cv2.INTER_LINEAR)
+
+    # Exibe a imagem
     cv2.imshow("Tela", img)
 
     k = cv2.waitKey(1)
