@@ -1,180 +1,40 @@
-from ultralytics import YOLO
 import cv2
-from collections import defaultdict
-import numpy as np
-import time
+from ultralytics import solutions
 
-# Carrega o modelo YOLO
-try:
-    model = YOLO("runs/detect/train8/weights/best.pt")
-    print("✅ Modelo YOLO carregado com sucesso")
-except Exception as e:
-    print(f"❌ Erro ao carregar modelo: {e}")
-    exit()
+cap = cv2.VideoCapture(r"C:/Users/dsadm/Desktop/IA para Reconhecimento Facial/videos/Pessoas_2x.mp4")
+assert cap.isOpened(), "Error reading video file"
 
-# Inicializa a webcam (fallback)
-cap = cv2.VideoCapture(0)  # 0 = webcam padrão
-if not cap.isOpened():   
-    print("❌ Webcam não encontrada! Criando fallback...")
-    # Fallback para imagem estática se webcam falhar
-    webcam_available = False
-else:
-    webcam_available = True
-    print("✅ Webcam inicializada com sucesso")
+region_points = [(20, 400), (1080, 400)]                                      # line counting
+#region_points = [(20, 400), (1080, 400), (1080, 360), (20, 360)]  # rectangle region
+# region_points = [(20, 400), (1080, 400), (1080, 360), (20, 360), (20, 400)]   # polygon region
 
-# Variáveis de estado
-track_history = defaultdict(lambda: [])
-seguir = True
-deixar_rastro = True
+# Video writer
+w, h, fps = (int(cap.get(x)) for x in (cv2.CAP_PROP_FRAME_WIDTH, cv2.CAP_PROP_FRAME_HEIGHT, cv2.CAP_PROP_FPS))
+video_writer = cv2.VideoWriter("object_counting_output.avi", cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
 
-# Configura a janela
-cv2.namedWindow("Tela", cv2.WINDOW_NORMAL)
-cv2.resizeWindow("Tela", 640, 480)
+# Initialize object counter object
+counter = solutions.ObjectCounter(
+    show=True,  # display the output
+    region=region_points,  # pass region points
+    model="yolo11n.pt",  # model="yolo11n-obb.pt" for object counting with OBB model.
+    # classes=[0, 2],  # count specific classes i.e. person and car with COCO pretrained model.
+    # tracker="botsort.yaml",  # choose trackers i.e "bytetrack.yaml"
+)
 
-print("\n🔄 Iniciando detecção pela WEBCAM...")
-print("Controles:")
-print("q - Sair | s - Toggle rastreamento | r - Toggle rastro | c - Limpar rastros")
+# Process video
+while cap.isOpened():
+    success, im0 = cap.read()
 
-# Variáveis para FPS
-frame_count = 0
-start_time = time.time()
-fps = 0.0
-
-while True:
-    # CAPTURA DA WEBCAM
-    if webcam_available:
-        ret, img = cap.read()
-        if not ret:
-            print("⚠️ Erro na webcam, usando fallback...")
-            webcam_available = False
-            img = np.zeros((480, 640, 3), dtype=np.uint8)
-            cv2.putText(img, "Webcam falhou", (50, 240), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-    else:
-        # Fallback: imagem de teste com movimento
-        img = np.zeros((480, 640, 3), dtype=np.uint8)
-        # Adiciona algum movimento simulado para teste
-        center_x = int(320 + 100 * np.sin(frame_count * 0.1))
-        center_y = int(240 + 80 * np.cos(frame_count * 0.1))
-        cv2.circle(img, (center_x, center_y), 30, (0, 255, 0), -1)
-        cv2.putText(img, "Modo Simulacao - Use Webcam", (50, 440), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-
-    # CONVERTE CORES (BGR para RGB)
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-    # PROCESSAMENTO YOLO
-    try:
-        if seguir:
-            results = model.track(
-                source=img_rgb, 
-                persist=True, 
-                verbose=False, 
-                conf=0.5,
-                tracker="bytetrack.yaml"
-            )
-        else:
-            results = model(
-                source=img_rgb, 
-                verbose=False, 
-                conf=0.5
-            )
-    except Exception as e:
-        print(f"❌ Erro no YOLO: {e}")
-        results = []
-
-    # PROCESSAMENTO DOS RESULTADOS
-    annotated_frame = img.copy()  # Mantém BGR para exibição
-    
-    if results:
-        for result in results:
-            # Plota as detecções (result.plot() retorna imagem BGR)
-            annotated_frame = result.plot()
-            
-            # RASTREAMENTO
-            if (seguir and deixar_rastro and 
-                result.boxes is not None and 
-                result.boxes.id is not None):
-                
-                try:
-                    boxes = result.boxes.xywh.cpu().numpy()
-                    track_ids = result.boxes.id.int().cpu().tolist()
-                    
-                    for box, track_id in zip(boxes, track_ids):
-                        x, y, w, h = box
-                        track = track_history[track_id]
-                        track.append((float(x), float(y)))
-                        
-                        # Limita o histórico
-                        if len(track) > 30:
-                            track.pop(0)
-                        
-                        # Desenha o rastro
-                        if len(track) > 1:
-                            points = np.array(track, dtype=np.int32)
-                            cv2.polylines(
-                                annotated_frame, 
-                                [points], 
-                                isClosed=False, 
-                                color=(230, 0, 0), 
-                                thickness=3
-                            )
-                except Exception as e:
-                    # print(f"⚠️ Erro no rastreamento: {e}")
-                    continue
-
-    # CÁLCULO DE FPS
-    frame_count += 1
-    current_time = time.time()
-    elapsed_time = current_time - start_time
-    
-    if elapsed_time >= 1.0:
-        fps = frame_count / elapsed_time
-        frame_count = 0
-        start_time = current_time
-        print(f"📊 FPS: {fps:.1f}")
-
-    # PREPARAÇÃO PARA EXIBIÇÃO
-    display_frame = cv2.resize(annotated_frame, (640, 480), interpolation=cv2.INTER_LINEAR)
-    
-    # ADICIONA INFORMAÇÕES NA TELA
-    status_text = f"Track: {seguir} | Rastro: {deixar_rastro} | FPS: {fps:.1f}"
-    cv2.putText(
-        display_frame, 
-        status_text, 
-        (10, 30), 
-        cv2.FONT_HERSHEY_SIMPLEX, 
-        0.6, 
-        (0, 255, 0), 
-        2
-    )
-    
-    # EXIBE A IMAGEM
-    cv2.imshow("Tela", display_frame)
-
-    # CONTROLES DE TECLADO
-    key = cv2.waitKey(1) & 0xFF
-    if key == ord('q'):
+    if not success:
+        print("Video frame is empty or processing is complete.")
         break
-    elif key == ord('s'):
-        seguir = not seguir
-        estado = "LIGADO" if seguir else "DESLIGADO"
-        print(f"🔁 Rastreamento: {estado}")
-    elif key == ord('r'):
-        deixar_rastro = not deixar_rastro
-        estado = "LIGADO" if deixar_rastro else "DESLIGADO"
-        print(f"🎯 Rastro: {estado}")
-    elif key == ord('c'):
-        track_history.clear()
-        print("🧹 Rastros limpos")
-    elif key == ord('w'):
-        # Tenta alternar para webcam se disponível
-        if not webcam_available and cap.isOpened():
-            webcam_available = True
-            print("🔄 Alternando para webcam")
 
-# LIMPEZA FINAL
-if webcam_available:
-    cap.release()
-cv2.destroyAllWindows()
-print("🛑 Programa finalizado com sucesso!")
+    results = counter.process(im0)
+
+    # print(results)  # access the output
+
+    video_writer.write(results.plot_im)  # write the processed frame.
+
+cap.release()
+video_writer.release()
+cv2.destroyAllWindows()  # destroy all opened windows
