@@ -4,7 +4,7 @@ from collections import defaultdict
 import numpy as np
 import time
 
-# Stream RTSP (mude para o IP/câmera desejado)
+# Capturando a Webcam
 cap = cv2.VideoCapture(0)
 
 if not cap.isOpened():
